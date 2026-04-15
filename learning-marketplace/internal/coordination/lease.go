@@ -95,6 +95,33 @@ func (s *LeaseStore) Release(ctx context.Context, leaseID int64) error {
 	return nil
 }
 
+// KeepAlive refreshes a granted lease until the caller cancels the context.
+func (s *LeaseStore) KeepAlive(ctx context.Context, leaseID int64) error {
+	if leaseID == 0 {
+		return nil
+	}
+
+	ch, err := s.client.KeepAlive(ctx, clientv3.LeaseID(leaseID))
+	if err != nil {
+		return fmt.Errorf("keep etcd lease alive: %w", err)
+	}
+
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case _, ok := <-ch:
+				if !ok {
+					return
+				}
+			}
+		}
+	}()
+
+	return nil
+}
+
 func (s *LeaseStore) CurrentHolder(ctx context.Context, resource string) (*LeaseGrant, error) {
 	key := s.resourceKey(resource)
 	resp, err := s.client.Get(ctx, key)

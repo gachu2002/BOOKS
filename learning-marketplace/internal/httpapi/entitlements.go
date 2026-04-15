@@ -17,15 +17,21 @@ func registerEntitlementRoutes(r chi.Router, application *app.App) {
 			if consistency == "" {
 				consistency = "strong"
 			}
+			userID := pathID(r, "userID")
 
-			selectedStore := application.Store
 			source := "primary"
+			var (
+				items     []store.EntitlementWithProduct
+				selection store.UserShardSelection
+				err       error
+			)
 			if consistency == "eventual" && application.ReaderStore != nil {
-				selectedStore = application.ReaderStore
 				source = "replica"
+				items, err = application.ReaderStore.ListEntitlementsByUser(r.Context(), userID, store.Pagination{Limit: page.Limit, Offset: page.Offset})
+				selection = store.UserShardSelection{Route: application.ReaderStore.RouteUser(userID), Owner: "replica"}
+			} else {
+				items, selection, err = application.UserShards.ListEntitlementsByUser(r.Context(), userID, store.Pagination{Limit: page.Limit, Offset: page.Offset})
 			}
-
-			items, err := selectedStore.ListEntitlementsByUser(r.Context(), pathID(r, "userID"), store.Pagination{Limit: page.Limit, Offset: page.Offset})
 			if err != nil {
 				writeStoreError(w, err)
 				return
@@ -37,6 +43,8 @@ func registerEntitlementRoutes(r chi.Router, application *app.App) {
 				"offset":      page.Offset,
 				"consistency": consistency,
 				"source":      source,
+				"route":       selection.Route,
+				"shard_owner": selection.Owner,
 			})
 		})
 	})

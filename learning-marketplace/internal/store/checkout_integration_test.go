@@ -95,6 +95,9 @@ func TestCheckoutCohort_IsIdempotentForSameKey(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.False(t, first.IdempotentReplay)
+	require.Equal(t, user.ID, first.Placement.UserRoute.PartitionKey)
+	require.Equal(t, cohort.ID, first.Placement.CohortRoute.PartitionKey)
+	require.Equal(t, first.Placement.UserRoute.VirtualShard != first.Placement.CohortRoute.VirtualShard, first.Placement.CrossShard)
 
 	second, err := s.CheckoutCohort(context.Background(), store.CheckoutParams{
 		UserID:            user.ID,
@@ -108,6 +111,7 @@ func TestCheckoutCohort_IsIdempotentForSameKey(t *testing.T) {
 	require.Equal(t, first.Order.ID, second.Order.ID)
 	require.Equal(t, first.Payment.ID, second.Payment.ID)
 	require.Equal(t, first.Entitlement.ID, second.Entitlement.ID)
+	require.Equal(t, first.Placement, second.Placement)
 	require.Equal(t, 1, countRows(t, testDB.DB, "orders"))
 	require.Equal(t, 1, countRows(t, testDB.DB, "payments"))
 	require.Equal(t, 1, countRows(t, testDB.DB, "entitlements"))

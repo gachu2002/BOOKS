@@ -23,6 +23,14 @@ type UserLibraryItem struct {
 	UpdatedAt       time.Time `json:"updated_at"`
 }
 
+type UserLibraryProjectionStatus struct {
+	PendingEvents        int        `json:"pending_events"`
+	Stale                bool       `json:"stale"`
+	LatestProjectedAt    *time.Time `json:"latest_projected_at,omitempty"`
+	LatestSourceEventAt  *time.Time `json:"latest_source_event_at,omitempty"`
+	OldestPendingEventAt *time.Time `json:"oldest_pending_event_at,omitempty"`
+}
+
 func (s *Store) ListUserLibrary(ctx context.Context, userID string, page Pagination) ([]UserLibraryItem, error) {
 	const query = `
 SELECT order_id, user_id, product_id, cohort_id, product_slug, product_title, cohort_slug, cohort_title, total_cents, currency, source_event_id, source_event_type, projected_at, updated_at
@@ -66,4 +74,55 @@ LIMIT $2 OFFSET $3`
 	}
 
 	return items, nil
+}
+
+func (s *Store) GetUserLibraryProjectionStatus(ctx context.Context, userID string) (UserLibraryProjectionStatus, error) {
+	const query = `
+SELECT
+    (
+        SELECT COUNT(*)
+        FROM outbox_events oe
+        JOIN orders o ON o.id = oe.aggregate_id
+        WHERE oe.aggregate_type = 'order'
+          AND oe.event_type = 'order.paid'
+          AND oe.published_at IS NULL
+          AND o.user_id = $1
+    ) AS pending_events,
+    (
+        SELECT MAX(projected_at)
+        FROM user_library_projection
+        WHERE user_id = $1
+    ) AS latest_projected_at,
+    (
+        SELECT MAX(oe.created_at)
+        FROM outbox_events oe
+        JOIN orders o ON o.id = oe.aggregate_id
+        WHERE oe.aggregate_type = 'order'
+          AND oe.event_type = 'order.paid'
+          AND o.user_id = $1
+    ) AS latest_source_event_at,
+    (
+        SELECT MIN(oe.created_at)
+        FROM outbox_events oe
+        JOIN orders o ON o.id = oe.aggregate_id
+        WHERE oe.aggregate_type = 'order'
+          AND oe.event_type = 'order.paid'
+          AND oe.published_at IS NULL
+          AND o.user_id = $1
+    ) AS oldest_pending_event_at`
+
+	var status UserLibraryProjectionStatus
+	err := s.db.QueryRowContext(ctx, query, userID).Scan(
+		&status.PendingEvents,
+		&status.LatestProjectedAt,
+		&status.LatestSourceEventAt,
+		&status.OldestPendingEventAt,
+	)
+	if err != nil {
+		return UserLibraryProjectionStatus{}, fmt.Errorf("get user library projection status: %w", err)
+	}
+
+	status.Stale = status.PendingEvents > 0
+
+	return status, nil
 }

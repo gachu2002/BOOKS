@@ -15,15 +15,21 @@ type App struct {
 	ReaderDB    *sql.DB
 	Store       *store.Store
 	ReaderStore *store.Store
+	UserShards  *store.UserShards
 	LeaseStore  *coordination.LeaseStore
 	Reporter    *analytics.Reporter
 }
 
-func New(cfg config.Config, db *sql.DB, readerDB *sql.DB, leaseStore *coordination.LeaseStore) *App {
-	application := &App{Config: cfg, DB: db, ReaderDB: readerDB, Store: store.New(db), Reporter: analytics.NewReporter(db)}
+func New(cfg config.Config, db *sql.DB, readerDB *sql.DB, userShardStores []store.NamedStore, leaseStore *coordination.LeaseStore) *App {
+	primaryStore := store.New(db)
+	application := &App{Config: cfg, DB: db, ReaderDB: readerDB, Store: primaryStore, Reporter: analytics.NewReporter(db)}
 	if readerDB != nil {
 		application.ReaderStore = store.New(readerDB)
 	}
+	if len(userShardStores) == 0 {
+		userShardStores = []store.NamedStore{{Name: "primary", Store: primaryStore}}
+	}
+	application.UserShards = store.NewUserShards(cfg.PostgresShards.VirtualShards, userShardStores)
 	application.LeaseStore = leaseStore
 
 	return application

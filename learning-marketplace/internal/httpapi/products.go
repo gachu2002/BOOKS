@@ -1,10 +1,12 @@
 package httpapi
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -69,6 +71,46 @@ func registerProductRoutes(r chi.Router, application *app.App) {
 			writeJSON(w, http.StatusOK, map[string]any{"items": products, "limit": page.Limit, "offset": page.Offset})
 		})
 
+		r.Get("/published", func(w http.ResponseWriter, r *http.Request) {
+			page := parsePagination(r)
+			cursor, err := decodeProductCursor(r.URL.Query().Get("after"))
+			if err != nil {
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+
+			products, err := application.Store.ListPublishedProductsByCursor(r.Context(), page.Limit, cursor)
+			if err != nil {
+				writeStoreError(w, err)
+				return
+			}
+
+			response := map[string]any{"items": products, "limit": page.Limit}
+			if len(products) > 0 {
+				last := products[len(products)-1]
+				response["next_cursor"] = encodeProductCursor(store.ProductCursor{CreatedAt: last.CreatedAt, ID: last.ID})
+			}
+
+			writeJSON(w, http.StatusOK, response)
+		})
+
+		r.Get("/search", func(w http.ResponseWriter, r *http.Request) {
+			page := parsePagination(r)
+			searchQuery := strings.TrimSpace(r.URL.Query().Get("q"))
+			if searchQuery == "" {
+				writeError(w, http.StatusBadRequest, "q is required")
+				return
+			}
+
+			results, err := application.Store.SearchPublishedProducts(r.Context(), searchQuery, page.Limit)
+			if err != nil {
+				writeStoreError(w, err)
+				return
+			}
+
+			writeJSON(w, http.StatusOK, map[string]any{"items": results, "limit": page.Limit, "query": searchQuery})
+		})
+
 		r.Get("/{productID}", func(w http.ResponseWriter, r *http.Request) {
 			product, err := application.Store.GetProduct(r.Context(), pathID(r, "productID"))
 			if err != nil {
@@ -110,6 +152,39 @@ func registerProductRoutes(r chi.Router, application *app.App) {
 			w.WriteHeader(http.StatusNoContent)
 		})
 	})
+}
+
+func encodeProductCursor(cursor store.ProductCursor) string {
+	payload := cursor.CreatedAt.UTC().Format(time.RFC3339Nano) + "|" + cursor.ID
+	return base64.RawURLEncoding.EncodeToString([]byte(payload))
+}
+
+func decodeProductCursor(raw string) (*store.ProductCursor, error) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return nil, nil
+	}
+
+	decoded, err := base64.RawURLEncoding.DecodeString(trimmed)
+	if err != nil {
+		return nil, errors.New("after cursor must be valid base64url")
+	}
+
+	parts := strings.SplitN(string(decoded), "|", 2)
+	if len(parts) != 2 {
+		return nil, errors.New("after cursor must contain timestamp and id")
+	}
+
+	createdAt, err := time.Parse(time.RFC3339Nano, parts[0])
+	if err != nil {
+		return nil, errors.New("after cursor timestamp must be RFC3339Nano")
+	}
+
+	if strings.TrimSpace(parts[1]) == "" {
+		return nil, errors.New("after cursor id cannot be empty")
+	}
+
+	return &store.ProductCursor{CreatedAt: createdAt, ID: parts[1]}, nil
 }
 
 func validateCreateProduct(req createProductRequest) (store.ProductCreateParams, error) {

@@ -29,13 +29,29 @@ func TestUserLibraryProjector_ProcessPendingAndRebuild(t *testing.T) {
 		IdempotencyKey:  "projection-001",
 	})
 	require.NoError(t, err)
+	require.NoError(t, downgradeProjectorOutboxPayloadToLegacyShape(t, testDB.DB))
 
 	require.Equal(t, 0, countProjectionRows(t, testDB.DB))
+	status, err := s.GetUserLibraryProjectionStatus(context.Background(), user.ID)
+	require.NoError(t, err)
+	require.True(t, status.Stale)
+	require.Equal(t, 1, status.PendingEvents)
+	require.Nil(t, status.LatestProjectedAt)
+	require.NotNil(t, status.LatestSourceEventAt)
+	require.NotNil(t, status.OldestPendingEventAt)
 
 	processed, err := p.ProcessPending(context.Background(), 10)
 	require.NoError(t, err)
 	require.Equal(t, 1, processed)
 	require.Equal(t, 1, countProjectionRows(t, testDB.DB))
+
+	status, err = s.GetUserLibraryProjectionStatus(context.Background(), user.ID)
+	require.NoError(t, err)
+	require.False(t, status.Stale)
+	require.Equal(t, 0, status.PendingEvents)
+	require.NotNil(t, status.LatestProjectedAt)
+	require.NotNil(t, status.LatestSourceEventAt)
+	require.Nil(t, status.OldestPendingEventAt)
 
 	items, err := s.ListUserLibrary(context.Background(), user.ID, store.Pagination{Limit: 10, Offset: 0})
 	require.NoError(t, err)
@@ -90,5 +106,11 @@ func countProjectionRows(t *testing.T, db *sql.DB) int {
 func truncateProjection(t *testing.T, db *sql.DB) error {
 	t.Helper()
 	_, err := db.ExecContext(context.Background(), `TRUNCATE TABLE user_library_projection`)
+	return err
+}
+
+func downgradeProjectorOutboxPayloadToLegacyShape(t *testing.T, db *sql.DB) error {
+	t.Helper()
+	_, err := db.ExecContext(context.Background(), `UPDATE outbox_events SET payload = payload - 'schema_version' WHERE event_type = 'order.paid'`)
 	return err
 }

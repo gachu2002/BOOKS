@@ -21,28 +21,39 @@ func registerLibraryRoutes(r chi.Router, application *app.App) {
 			userID := pathID(r, "userID")
 			switch source {
 			case "truth":
-				items, err := application.Store.ListEntitlementsByUser(r.Context(), userID, store.Pagination{Limit: page.Limit, Offset: page.Offset})
+				items, selection, err := application.UserShards.ListEntitlementsByUser(r.Context(), userID, store.Pagination{Limit: page.Limit, Offset: page.Offset})
 				if err != nil {
 					writeStoreError(w, err)
 					return
 				}
 				writeJSON(w, http.StatusOK, map[string]any{
-					"items":  items,
-					"limit":  page.Limit,
-					"offset": page.Offset,
-					"source": "truth",
+					"items":       items,
+					"limit":       page.Limit,
+					"offset":      page.Offset,
+					"source":      "truth",
+					"route":       selection.Route,
+					"shard_owner": selection.Owner,
 				})
 			case "projection":
-				items, err := application.Store.ListUserLibrary(r.Context(), userID, store.Pagination{Limit: page.Limit, Offset: page.Offset})
+				selectedStore, selection := application.UserShards.Resolve(userID)
+				items, err := selectedStore.ListUserLibrary(r.Context(), userID, store.Pagination{Limit: page.Limit, Offset: page.Offset})
+				if err != nil {
+					writeStoreError(w, err)
+					return
+				}
+				freshness, err := selectedStore.GetUserLibraryProjectionStatus(r.Context(), userID)
 				if err != nil {
 					writeStoreError(w, err)
 					return
 				}
 				writeJSON(w, http.StatusOK, map[string]any{
-					"items":  items,
-					"limit":  page.Limit,
-					"offset": page.Offset,
-					"source": "projection",
+					"items":       items,
+					"limit":       page.Limit,
+					"offset":      page.Offset,
+					"source":      "projection",
+					"freshness":   freshness,
+					"route":       selection.Route,
+					"shard_owner": selection.Owner,
 				})
 			default:
 				writeError(w, http.StatusBadRequest, "source must be one of: truth, projection")

@@ -62,9 +62,26 @@ The project is meant to be built chapter by chapter:
 
 If your goal is learning DDIA with this repo, only use these docs:
 
-- `docs/ddia-map.md`: exact chapter -> code -> command -> experiment mapping
+- `docs/ddia-map.md`: strict chapter -> real project flow -> code -> command mapping
+- `docs/ddia-status.md`: audit truth for which chapters the real project teaches well today
 - `docs/system.md`: what the system is and what constraints it has
 - `docs/invariants.md`: what must stay correct and what may lag
+
+The main DDIA path is intentionally project-first:
+
+- it excludes standalone chapter labs, synthetic demo packages, and lab-only endpoints
+- if a chapter is weak in the real product, the map should say so instead of inventing coverage
+
+Minimal chapter loop:
+
+1. `ddia-status <chapter>`
+2. `ddia-map <chapter>`
+3. read only the mapped files
+4. run only the mapped command or endpoint
+5. write `5` lines of notes: source of truth, derived state, trade-off, failure mode, missing coverage
+
+Use `ddia-audit <chapter>` only if the chapter is still `not audited` or the repo changed a lot.
+Use `ddia-fix <chapter>` only when you want to improve a real product path.
 
 ## Current scope
 
@@ -81,6 +98,7 @@ This first cut includes:
 - rebuildable batch analytics for daily revenue and cohort fill
 - Prometheus metrics endpoint and request logging middleware
 - GitHub Actions CI for build, test, and lint
+- Chapter 4 storage/retrieval lab with keyset pagination, search, and query plans
 - initial SQL schema for the core business entities
 - phase planning docs to guide the next implementations
 

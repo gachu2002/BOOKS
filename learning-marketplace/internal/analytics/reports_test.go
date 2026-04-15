@@ -29,7 +29,7 @@ func TestReporter_RebuildsDailyRevenueAndCohortFill(t *testing.T) {
 	_, err = s.CheckoutCohort(context.Background(), store.CheckoutParams{UserID: user2.ID, CohortID: cohort.ID, PromoCode: stringPtr(promo.Code), PaymentProvider: "demo", IdempotencyKey: "report-002"})
 	require.NoError(t, err)
 
-	require.NoError(t, reporter.Rebuild(context.Background()))
+	require.NoError(t, reporter.Rebuild(context.Background(), analytics.RebuildMetadata{RebuiltBy: "test-batch", FencingToken: 41}))
 
 	daily, err := reporter.ListDailyRevenue(context.Background(), 10, 0)
 	require.NoError(t, err)
@@ -38,6 +38,8 @@ func TestReporter_RebuildsDailyRevenueAndCohortFill(t *testing.T) {
 	require.EqualValues(t, 20000, daily[0].GrossRevenueCents)
 	require.EqualValues(t, 1000, daily[0].DiscountCents)
 	require.EqualValues(t, 19000, daily[0].NetRevenueCents)
+	require.Equal(t, "test-batch", daily[0].RebuiltBy)
+	require.EqualValues(t, 41, daily[0].FencingToken)
 
 	cohortFill, err := reporter.ListCohortFill(context.Background(), 10, 0)
 	require.NoError(t, err)
@@ -47,6 +49,8 @@ func TestReporter_RebuildsDailyRevenueAndCohortFill(t *testing.T) {
 	require.Equal(t, 2, cohortFill[0].SoldSeats)
 	require.EqualValues(t, 50.0, cohortFill[0].FillRatePercent)
 	require.EqualValues(t, 20000, cohortFill[0].RevenueCents)
+	require.Equal(t, "test-batch", cohortFill[0].RebuiltBy)
+	require.EqualValues(t, 41, cohortFill[0].FencingToken)
 }
 
 func createReportsUserFixture(t *testing.T, s *store.Store, email string) store.User {

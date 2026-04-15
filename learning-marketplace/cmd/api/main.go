@@ -54,6 +54,17 @@ func main() {
 		defer readerDB.Close()
 	}
 
+	userShardStores := make([]store.NamedStore, 0)
+	for idx, shardCfg := range cfg.PostgresShards.Nodes() {
+		shardDB, err := postgres.Open(ctx, shardCfg)
+		if err != nil {
+			slog.Error("failed to open postgres user shard", "index", idx, "error", err)
+			os.Exit(1)
+		}
+		defer shardDB.Close()
+		userShardStores = append(userShardStores, store.NamedStore{Name: cfg.PostgresShards.NameForIndex(idx), Store: store.New(shardDB)})
+	}
+
 	migrationCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 
@@ -61,8 +72,14 @@ func main() {
 		slog.Error("failed to apply migrations", "error", err)
 		os.Exit(1)
 	}
+	for idx, shardStore := range userShardStores {
+		if err := postgres.Migrate(migrationCtx, shardStore.Store.DB()); err != nil {
+			slog.Error("failed to apply shard migrations", "index", idx, "error", err)
+			os.Exit(1)
+		}
+	}
 
-	application := app.New(cfg, db, readerDB, leaseStore)
+	application := app.New(cfg, db, readerDB, userShardStores, leaseStore)
 	router := httpapi.NewRouter(application)
 	server := &http.Server{
 		Addr:              cfg.HTTPAddr,

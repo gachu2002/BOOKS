@@ -14,6 +14,7 @@ type Config struct {
 
 	Postgres        PostgresConfig
 	PostgresReplica PostgresReplicaConfig
+	PostgresShards  PostgresShardConfig
 	Projector       ProjectorConfig
 	Etcd            EtcdConfig
 }
@@ -30,6 +31,18 @@ type PostgresConfig struct {
 type PostgresReplicaConfig struct {
 	Enabled bool
 	PostgresConfig
+}
+
+type PostgresShardConfig struct {
+	Enabled       bool
+	Hosts         []string
+	Names         []string
+	Port          string
+	DB            string
+	User          string
+	Password      string
+	SSLMode       string
+	VirtualShards int
 }
 
 type ProjectorConfig struct {
@@ -67,6 +80,17 @@ func Load() Config {
 				SSLMode:  getEnv("POSTGRES_REPLICA_SSLMODE", "disable"),
 			},
 		},
+		PostgresShards: PostgresShardConfig{
+			Enabled:       getEnvBool("POSTGRES_SHARDS_ENABLED", false),
+			Hosts:         getEnvList("POSTGRES_SHARD_HOSTS", nil),
+			Names:         getEnvList("POSTGRES_SHARD_NAMES", nil),
+			Port:          getEnv("POSTGRES_SHARD_PORT", "5432"),
+			DB:            getEnv("POSTGRES_SHARD_DB", "learning_marketplace"),
+			User:          getEnv("POSTGRES_SHARD_USER", "app"),
+			Password:      getEnv("POSTGRES_SHARD_PASSWORD", "app"),
+			SSLMode:       getEnv("POSTGRES_SHARD_SSLMODE", "disable"),
+			VirtualShards: getEnvInt("POSTGRES_SHARD_VIRTUAL_SHARDS", 16),
+		},
 		Projector: ProjectorConfig{
 			BatchSize:    getEnvInt("PROJECTOR_BATCH_SIZE", 50),
 			PollInterval: getEnvDuration("PROJECTOR_POLL_INTERVAL", 2*time.Second),
@@ -78,6 +102,37 @@ func Load() Config {
 			KeyPrefix:   getEnv("ETCD_KEY_PREFIX", "/learning-marketplace/leases/"),
 		},
 	}
+}
+
+func (p PostgresShardConfig) Nodes() []PostgresConfig {
+	if !p.Enabled || len(p.Hosts) == 0 {
+		return nil
+	}
+
+	nodes := make([]PostgresConfig, 0, len(p.Hosts))
+	for _, host := range p.Hosts {
+		nodes = append(nodes, PostgresConfig{
+			Host:     host,
+			Port:     p.Port,
+			DB:       p.DB,
+			User:     p.User,
+			Password: p.Password,
+			SSLMode:  p.SSLMode,
+		})
+	}
+
+	return nodes
+}
+
+func (p PostgresShardConfig) NameForIndex(idx int) string {
+	if idx >= 0 && idx < len(p.Names) && p.Names[idx] != "" {
+		return p.Names[idx]
+	}
+	if idx >= 0 && idx < len(p.Hosts) && p.Hosts[idx] != "" {
+		return p.Hosts[idx]
+	}
+
+	return fmt.Sprintf("shard-%d", idx)
 }
 
 func (p PostgresConfig) DSN() string {

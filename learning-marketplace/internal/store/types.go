@@ -29,6 +29,16 @@ type Product struct {
 	UpdatedAt   time.Time       `json:"updated_at"`
 }
 
+type ProductCursor struct {
+	CreatedAt time.Time `json:"created_at"`
+	ID        string    `json:"id"`
+}
+
+type ProductSearchResult struct {
+	Product Product `json:"product"`
+	Rank    float64 `json:"rank"`
+}
+
 type Cohort struct {
 	ID                 string     `json:"id"`
 	ProductID          string     `json:"product_id"`
@@ -198,12 +208,13 @@ type CheckoutParams struct {
 }
 
 type CheckoutResult struct {
-	IdempotentReplay bool        `json:"idempotent_replay"`
-	Order            Order       `json:"order"`
-	Payment          Payment     `json:"payment"`
-	Entitlement      Entitlement `json:"entitlement"`
-	Product          Product     `json:"product"`
-	Cohort           Cohort      `json:"cohort"`
-	AppliedPromoCode *PromoCode  `json:"applied_promo_code,omitempty"`
-	SeatsRemaining   int         `json:"seats_remaining"`
+	IdempotentReplay bool              `json:"idempotent_replay"`
+	Order            Order             `json:"order"`
+	Payment          Payment           `json:"payment"`
+	Entitlement      Entitlement       `json:"entitlement"`
+	Product          Product           `json:"product"`
+	Cohort           Cohort            `json:"cohort"`
+	Placement        CheckoutPlacement `json:"placement"`
+	AppliedPromoCode *PromoCode        `json:"applied_promo_code,omitempty"`
+	SeatsRemaining   int               `json:"seats_remaining"`
 }

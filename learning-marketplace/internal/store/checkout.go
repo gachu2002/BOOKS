@@ -24,6 +24,7 @@ func (s *Store) CheckoutCohort(ctx context.Context, params CheckoutParams) (Chec
 	}
 	if found {
 		existing.IdempotentReplay = true
+		existing.Placement = s.CheckoutPlacement(params)
 		return existing, nil
 	}
 
@@ -85,6 +86,7 @@ func (s *Store) CheckoutCohort(ctx context.Context, params CheckoutParams) (Chec
 				return CheckoutResult{}, replayErr
 			}
 			replay.IdempotentReplay = true
+			replay.Placement = s.CheckoutPlacement(params)
 			return replay, nil
 		}
 		return CheckoutResult{}, err
@@ -101,6 +103,7 @@ func (s *Store) CheckoutCohort(ctx context.Context, params CheckoutParams) (Chec
 				return CheckoutResult{}, replayErr
 			}
 			replay.IdempotentReplay = true
+			replay.Placement = s.CheckoutPlacement(params)
 			return replay, nil
 		}
 		return CheckoutResult{}, err
@@ -129,6 +132,7 @@ func (s *Store) CheckoutCohort(ctx context.Context, params CheckoutParams) (Chec
 	}
 
 	if err := insertOutboxEvent(ctx, tx, "order", order.ID, "order.paid", map[string]any{
+		"schema_version":  1,
 		"order_id":        order.ID,
 		"user_id":         params.UserID,
 		"product_id":      product.ID,
@@ -152,6 +156,7 @@ func (s *Store) CheckoutCohort(ctx context.Context, params CheckoutParams) (Chec
 		Entitlement:      entitlement,
 		Product:          product,
 		Cohort:           cohort,
+		Placement:        s.CheckoutPlacement(params),
 		AppliedPromoCode: appliedPromo,
 		SeatsRemaining:   cohort.Capacity - sold - 1,
 	}, nil

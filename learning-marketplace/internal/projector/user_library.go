@@ -25,6 +25,7 @@ type outboxEvent struct {
 }
 
 type orderPaidPayload struct {
+	SchemaVersion int    `json:"schema_version"`
 	OrderID       string `json:"order_id"`
 	UserID        string `json:"user_id"`
 	ProductID     string `json:"product_id"`
@@ -109,6 +110,12 @@ func (p *UserLibraryProjector) applyEvent(ctx context.Context, tx *sql.Tx, event
 		var payload orderPaidPayload
 		if err := json.Unmarshal(event.Payload, &payload); err != nil {
 			return fmt.Errorf("decode outbox event %s: %w", event.ID, err)
+		}
+		if payload.SchemaVersion == 0 {
+			payload.SchemaVersion = 1
+		}
+		if payload.SchemaVersion != 1 {
+			return fmt.Errorf("decode outbox event %s: unsupported order.paid schema_version %d", event.ID, payload.SchemaVersion)
 		}
 
 		product, cohort, err := loadProjectionSourceData(ctx, tx, payload.ProductID, payload.CohortID)
